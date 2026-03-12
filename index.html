@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+<title>B.Ed Vault</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+
+*{box-sizing:border-box}
+
+body{
+margin:0;
+font-family:Inter,Segoe UI,Arial;
+background:#eef2f6;
+}
+
+.header{
+background:#42A5F5;
+color:white;
+padding:16px;
+font-size:20px;
+font-weight:600;
+text-align:center;
+position:sticky;
+top:0;
+z-index:100;
+}
+
+.container{
+max-width:800px;
+margin:auto;
+padding:18px;
+}
+
+#search{
+width:100%;
+padding:12px;
+border-radius:10px;
+border:1px solid #ddd;
+margin-bottom:18px;
+font-size:15px;
+}
+
+.section{
+background:white;
+border-radius:14px;
+padding:18px;
+box-shadow:0 6px 14px rgba(0,0,0,0.06);
+}
+
+.fileCardi{
+font-weight:600;
+font-size:16px;
+padding:10px 4px;
+margin-top:12px;
+color:#444;
+}
+
+.fileCard{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:14px;
+border-radius:10px;
+background:#fafafa;
+border:1px solid #eee;
+margin-bottom:10px;
+flex-wrap:wrap;
+}
+
+.fileCard:hover{
+background:#f3f7ff;
+}
+
+.fileName{
+font-weight:600;
+font-size:15px;
+}
+
+.fileAuthor{
+font-size:12px;
+color:#777;
+margin-top:2px;
+}
+
+.downloadBtn{
+background:#42A5F5;
+color:white;
+border:none;
+padding:8px 16px;
+border-radius:8px;
+cursor:pointer;
+font-size:14px;
+}
+
+.downloadBtn:hover{
+background:#1e88e5;
+}
+
+.progressBar{
+width:100%;
+height:6px;
+background:#ddd;
+border-radius:4px;
+margin-top:10px;
+overflow:hidden;
+display:none;
+}
+
+.progressFill{
+height:100%;
+width:0%;
+background:#42A5F5;
+transition:width .2s;
+}
+
+#pdfContainer{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:white;
+z-index:9999;
+overflow:auto;
+}
+
+.viewerHeader{
+background:#42A5F5;
+color:white;
+padding:14px;
+display:flex;
+align-items:center;
+font-weight:600;
+}
+
+.backBtn{
+background:white;
+border:none;
+color:#42A5F5;
+padding:6px 12px;
+border-radius:6px;
+margin-right:10px;
+cursor:pointer;
+}
+
+#pdfViewer{
+max-width:900px;
+margin:auto;
+padding:10px;
+transform-origin:0 0;
+}
+
+.page{margin-bottom:8px}
+canvas{display:block;margin:auto}
+
+</style>
+</head>
+
+<body>
+
+<div class="header">B.Ed Vault</div>
+
+<div class="container">
+
+<input id="search" placeholder="Search materials..." onkeyup="searchFiles()">
+
+<div class="section">
+<div id="books"></div>
+</div>
+
+</div>
+
+<div id="pdfContainer">
+
+<div class="viewerHeader">
+<button class="backBtn" onclick="closeViewer()">← Back</button>
+Viewer
+</div>
+
+<div id="pdfViewer"></div>
+
+</div>
+
+<script>
+
+/* BASE URL */
+
+const baseURL =
+"https://raw.githubusercontent.com/Aro5683/B.Ed-DB/main/"
+
+/* BOOK LIST */
+
+const books=[
+
+["First Semester"],
+
+["BD1CE Unit-1 ENG","Nagarajan","BD1CE%20Unit-1%20ENG.bed"],
+["BD1CE Unit-2 ENG","Nagarajan","BD1CE.Unit-2.ENG.bed"],
+["BD1CE Unit-3 ENG","Nagarajan","BD1CE.Unit-3.ENG.bed"],
+["BD1CE Unit-4 ENG","Nagarajan","BD1CE.Unit-4.ENG.bed"],
+["BD1CE Unit-5 ENG","Nagarajan","BD1CE.Unit-5.ENG.bed"],
+["BD1CE Unit-6 ENG","Nagarajan","BD1CE.Unit-6.ENG.bed"],
+["BD1CE Unit-7 ENG","Nagarajan","BD1CE.Unit-7.ENG.bed"],
+
+["Second Semester"],
+
+["BD2EE Unit-1 TAM","Nagarajan","BD2EE.Unit-1.bed"],
+["BD2EE Unit-2 TAM","Nagarajan","BD2EE.Unit-2.bed"]
+
+]
+
+/* RENDER BOOKS */
+
+const container=document.getElementById("books")
+
+books.forEach((b,i)=>{
+
+if(b.length==1){
+
+container.innerHTML+=`<div class="fileCardi">${b[0]}</div>`
+
+}else{
+
+container.innerHTML+=`
+
+<div class="fileCard">
+
+<div>
+<div class="fileName">${b[0]}</div>
+<div class="fileAuthor">${b[1]}</div>
+</div>
+
+<button class="downloadBtn"
+data-id="file${i}"
+data-url="${baseURL}${b[2]}"
+onclick="handleButton(this)">
+Download
+</button>
+
+<div class="progressBar">
+<div class="progressFill"></div>
+</div>
+
+</div>
+`
+
+}
+
+})
+
+/* SEARCH */
+
+function searchFiles(){
+
+let input=document.getElementById("search").value.toLowerCase()
+
+document.querySelectorAll(".fileCard").forEach(card=>{
+card.style.display=
+card.innerText.toLowerCase().includes(input)?"flex":"none"
+})
+
+}
+
+/* INDEXEDDB */
+
+let db
+
+let req=indexedDB.open("bedVault",1)
+
+req.onupgradeneeded=e=>{
+db=e.target.result
+db.createObjectStore("files")
+}
+
+req.onsuccess=e=>{
+db=e.target.result
+updateButtons()
+}
+
+/* SAVE FILE */
+
+function saveFile(id,data){
+
+let tx=db.transaction("files","readwrite")
+tx.objectStore("files").put(data,id)
+
+localStorage.setItem("downloaded_"+id,"true")
+
+}
+
+/* GET FILE */
+
+function getFile(id){
+
+return new Promise(resolve=>{
+
+let tx=db.transaction("files","readonly")
+let req=tx.objectStore("files").get(id)
+
+req.onsuccess=()=>resolve(req.result)
+
+})
+
+}
+
+/* UPDATE BUTTON */
+
+function updateButtons(){
+
+document.querySelectorAll(".downloadBtn").forEach(btn=>{
+
+let id=btn.dataset.id
+
+if(localStorage.getItem("downloaded_"+id)){
+btn.innerText="Open"
+}
+
+})
+
+}
+
+/* BUTTON CLICK */
+
+async function handleButton(btn){
+
+let id=btn.dataset.id
+let url=btn.dataset.url
+
+if(localStorage.getItem("downloaded_"+id)){
+
+let data=await getFile(id)
+decryptBuffer(data)
+return
+
+}
+
+let bar=btn.parentElement.querySelector(".progressBar")
+let fill=btn.parentElement.querySelector(".progressFill")
+
+bar.style.display="block"
+
+btn.innerText="Downloading..."
+btn.disabled=true
+
+downloadFile(url,id,btn,fill)
+
+}
+
+/* DOWNLOAD */
+
+async function downloadFile(url,id,btn,fill){
+
+try{
+
+const res = await fetch(url)
+
+if(!res.ok) throw "error"
+
+const total = res.headers.get("content-length")
+
+const buffer = await res.arrayBuffer()
+
+fill.style.width="100%"
+
+saveFile(id,buffer)
+
+btn.innerText="Open"
+btn.disabled=false
+
+let bar=btn.parentElement.querySelector(".progressBar")
+setTimeout(()=>bar.style.display="none",500)
+
+}catch{
+
+btn.innerText="Retry"
+btn.disabled=false
+
+}
+
+}
+
+/* DECRYPT */
+
+async function decryptBuffer(buffer){
+
+const iv=buffer.slice(0,12)
+const keyData=buffer.slice(12,44)
+const encrypted=buffer.slice(44)
+
+const key=await crypto.subtle.importKey(
+"raw",
+keyData,
+{name:"AES-GCM"},
+false,
+["decrypt"]
+)
+
+const decrypted=await crypto.subtle.decrypt(
+{name:"AES-GCM",iv:new Uint8Array(iv)},
+key,
+encrypted
+)
+
+pdfData=new Uint8Array(decrypted)
+
+openViewer()
+loadPDF()
+
+}
+
+/* VIEWER */
+
+function openViewer(){
+
+document.querySelector(".container").style.display="none"
+pdfContainer.style.display="block"
+
+}
+
+function closeViewer(){
+
+pdfContainer.style.display="none"
+document.querySelector(".container").style.display="block"
+
+}
+
+/* PDF */
+
+let pdfDoc=null
+let pdfData=null
+
+const viewer=document.getElementById("pdfViewer")
+
+async function loadPDF(){
+
+viewer.innerHTML=""
+
+pdfDoc=await pdfjsLib.getDocument({data:pdfData}).promise
+
+for(let i=1;i<=pdfDoc.numPages;i++){
+
+const page=await pdfDoc.getPage(i)
+
+const viewport=page.getViewport({scale:1.3})
+
+const canvas=document.createElement("canvas")
+const ctx=canvas.getContext("2d")
+
+canvas.width=viewport.width
+canvas.height=viewport.height
+
+await page.render({
+canvasContext:ctx,
+viewport:viewport
+}).promise
+
+const div=document.createElement("div")
+div.className="page"
+div.appendChild(canvas)
+
+viewer.appendChild(div)
+
+}
+
+}
+
+</script>
+
+</body>
+</html>
